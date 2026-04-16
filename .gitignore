@@ -10,4 +10,3 @@ uploads/*
 .DS_Store
 
 .generated
-.dagger/sdk
