@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_ignite
+    restart: always
+    environment:
+      # Deixamos a senha vazia conforme sua DATABASE_URL (postgres:@localhost)
+      # Nota: Em produção, sempre use senha!
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ignite
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:

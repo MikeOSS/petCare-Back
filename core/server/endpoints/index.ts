@@ -4,23 +4,39 @@
  * during runtime, mimicking Rails' autoload feature.
  */
 
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { glob } from "glob";
-import { ControllerMap, ControllerSettings } from "../endpoints/types";
-import { existsSync } from "node:fs";
+
+import type { ControllerMap, ControllerSettings, Endpoint } from "../endpoints/types";
 import { reportTelemetryError } from "../telemetry";
 
 const IS_BUILT = __filename.endsWith(".mjs");
-const EXT = IS_BUILT ? ".mjs" : "";
+// Em dev o tsx/corre ficheiros `.ts`; build gera `.mjs`.
+const INDEX_EXT = IS_BUILT ? ".mjs" : ".ts";
+
+/** No Windows, import() dinâmico exige URL `file://`, não `C:\...`. */
+function importModule<T>(fsPath: string): Promise<T> {
+  const absolute = path.resolve(fsPath);
+  return import(pathToFileURL(absolute).href) as Promise<T>;
+}
+
+/** O pacote glob não trata bem `\\` nem `{a,b}` com caminhos Windows — usamos sempre padrões POSIX. */
+function globPattern(dir: string, ...parts: string[]): string {
+  return path.posix.join(
+    dir.split(path.sep).join(path.posix.sep),
+    ...parts,
+  );
+}
+
+function controllerIndexFile(controllerPath: string) {
+  return path.join(controllerPath, `index${INDEX_EXT}`);
+}
 
 function checkControllerExists(controllerPath: string) {
-  try {
-    import(`${controllerPath}/index${EXT}`);
-    return true;
-  } catch {
-    return false;
-  }
+  return existsSync(controllerIndexFile(controllerPath));
 }
 
 // Controllers path may be in different locations depending on the environment
@@ -41,7 +57,7 @@ function findControllers() {
 export default async function mapEndpoints() {
   // Find user directory
   const controllersPath = findControllers();
-  const controllersPaths = await glob(path.join(controllersPath, "/*"));
+  const controllersPaths = await glob(globPattern(controllersPath, "*"));
 
   // Map available controllers
   const controllers: ControllerMap = {};
@@ -49,7 +65,7 @@ export default async function mapEndpoints() {
   for (const controllerPath of controllersPaths) {
     // All endpoints are mapped back to their parent controller
     const basename = path.basename(controllerPath);
-    const resolvedControllerPath = path.join(controllerPath, `index${EXT}`);
+    const resolvedControllerPath = controllerIndexFile(controllerPath);
 
     if (!checkControllerExists(controllerPath)) {
       const error = new Error(
@@ -61,7 +77,9 @@ export default async function mapEndpoints() {
       continue;
     }
 
-    let settings = (await import(resolvedControllerPath)) as ControllerSettings;
+    let settings = (await importModule<ControllerSettings>(
+      resolvedControllerPath,
+    )) as ControllerSettings;
 
     // @ts-expect-error default might no be available on import
     if (settings.default) settings = settings.default;
@@ -69,19 +87,19 @@ export default async function mapEndpoints() {
     controllers[basename] = { endpoints: [], settings };
 
     // Map available endpoints
-    const endpointsPaths = await glob(
-      path.join(controllerPath, "/{queries,mutators}/*"),
-    );
+    const queries = await glob(globPattern(controllerPath, "queries", "*"));
+    const mutators = await glob(globPattern(controllerPath, "mutators", "*"));
+    const endpointsPaths = [...queries, ...mutators];
 
     // Import and assimilate available endpoints
     for (const endpointPath of endpointsPaths) {
-      const endpoint = await import(endpointPath);
+      const mod = await importModule<{ default?: Endpoint }>(endpointPath);
 
-      if (!endpoint.default) {
+      if (!mod.default) {
         throw new Error(`Invalid endpoint at ${endpointPath}`);
       }
 
-      controllers[basename].endpoints.push(endpoint.default);
+      controllers[basename].endpoints.push(mod.default);
     }
   }
 

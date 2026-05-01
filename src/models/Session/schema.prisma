@@ -1,0 +1,10 @@
+model Session {
+  id         String   @id @default(cuid())
+  user_id    String
+  expires_at DateTime
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("sessions")
+}

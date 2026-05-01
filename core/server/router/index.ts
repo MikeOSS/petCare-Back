@@ -17,6 +17,7 @@ import type {
   FastifyRequest,
   RouteHandlerMethod,
 } from "fastify";
+import { requireAuth } from "../auth/requireAuth";
 import type { GenericMethodParams, Endpoint } from "../endpoints/types";
 import type { Route } from "./types";
 
@@ -69,6 +70,11 @@ export class Router {
       for (let i = 0; i < this.paths.length; i++) {
         const route = this.paths[i];
         const onRequestList = [];
+
+        // Rotas sem isPublic = true passam por aqui primeiro (cookie ou Bearer).
+        if (route.handler.isPublic !== true) {
+          onRequestList.push(requireAuth);
+        }
 
         // Append the rest of on request hooks to middleware list
         if (route.handler.onRequest) {

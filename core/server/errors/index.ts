@@ -1,24 +1,27 @@
 import { FastifyError, FastifyReply, FastifyRequest } from "fastify";
+
+import { reportTelemetryError } from "../telemetry";
+import { AuthenticationError } from "./authenticationError";
 import GenericError from "./generic";
 import { PermissionError } from "./permissionError";
 import { UserNotFoundError } from "./userNotFound";
-import { AuthenticationError } from "./authenticationError";
-import { reportTelemetryError } from "../telemetry";
 
 export default function errorHandler(
   error: FastifyError,
   req: FastifyRequest,
   res: FastifyReply,
 ) {
-  // Do not log autehntication errors
-  if (error instanceof AuthenticationError) {
-    return null;
+  // Erros de login não vão para telemetria (acontecem muito e não são “bugs”).
+  if (!(error instanceof AuthenticationError)) {
+    reportTelemetryError(error, req);
   }
 
-  // Log errors in development, send errors to telemetry everywhere else
-  reportTelemetryError(error, req);
-
-  if (error instanceof GenericError) {
+  // Subclasses de GenericError primeiro — cada uma pode precisar de tratamento extra.
+  if (error instanceof AuthenticationError) {
+    res.clearCookie("token", {
+      path: "/",
+      domain: process.env.COOKIE_DOMAIN || undefined,
+    });
     return res.status(error.status).send({ message: error.message });
   }
 
@@ -26,12 +29,11 @@ export default function errorHandler(
     return res.status(error.status).send({ message: error.message });
   }
 
-  if (error instanceof AuthenticationError) {
-    res.clearCookie("token"); // Clear token cookie if still valid
+  if (error instanceof UserNotFoundError) {
     return res.status(error.status).send({ message: error.message });
   }
 
-  if (error instanceof UserNotFoundError) {
+  if (error instanceof GenericError) {
     return res.status(error.status).send({ message: error.message });
   }
 

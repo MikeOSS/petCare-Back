@@ -1,35 +1,21 @@
-import { PermissionLevel } from "@/.generated/client";
-import { FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
+
+// Helpers para quando no futuro existir permissão por “projeto” na base de dados.
+// Por agora só ADMIN passa; o resto fica fechado até o modelo existir no Prisma.
 
 export function isProjectActionAllowed(
   user: FastifyRequest["user"],
-  projectId: string,
-  action: PermissionLevel,
+  _projectId: string,
+  _action: "READ" | "WRITE",
 ) {
   if (user?.role === "ADMIN") return true;
-
-  const permittedIds =
-    user?.permissions
-      .filter((entry) =>
-        action === "WRITE" ? entry.permission === "WRITE" : true,
-      )
-      .map((permission) => permission.project_id) || [];
-
-  return permittedIds.includes(projectId);
+  return false;
 }
 
 export function getAllowedProjects(
   user: FastifyRequest["user"],
-  action: PermissionLevel = "READ",
+  _action: "READ" | "WRITE" = "READ",
 ) {
   if (user?.role === "ADMIN") return true;
-
-  const permittedIds =
-    user?.permissions
-      .filter((entry) =>
-        action === "WRITE" ? entry.permission === "WRITE" : true,
-      )
-      .map((permission) => permission.project_id) || [];
-
-  return permittedIds;
+  return [] as string[];
 }

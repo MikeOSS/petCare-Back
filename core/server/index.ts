@@ -7,6 +7,7 @@ import { User } from "@/.generated/client";
 import errorHandler from "./errors";
 import { createRouters, registerRouters } from "./router/register";
 import mapEndpoints from "./endpoints";
+import { getCorsOrigin } from "./cors";
 
 import "@/core/config";
 import "@/core/logging";
@@ -15,7 +16,7 @@ import { reportTelemetryError } from "./telemetry";
 declare module "fastify" {
   interface FastifyRequest {
     user?: User;
-    allowedProjects: string[];
+    allowedProjects?: string[];
   }
 }
 
@@ -23,7 +24,7 @@ export default async function startServer() {
   const fastify = Fastify();
 
   fastify.register(cors, {
-    origin: process.env.FRONT_END_ORIGIN,
+    origin: getCorsOrigin(),
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
   });
